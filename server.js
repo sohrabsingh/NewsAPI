@@ -149,7 +149,22 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Run file: lets start.bat find the running app and stop.bat shut down exactly this process.
+const RUN_FILE = path.join(__dirname, 'data', 'server.json');
+function clearRunFile() {
+  try { if (JSON.parse(fs.readFileSync(RUN_FILE, 'utf8')).pid === process.pid) fs.unlinkSync(RUN_FILE); } catch {}
+}
+process.on('exit', clearRunFile);
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, () => process.exit(0));
+
+server.on('error', e => {
+  console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is already in use — is Veritas already running? Run stop.bat first, or set PORT in .env.` : e.message);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
+  fs.mkdirSync(path.dirname(RUN_FILE), { recursive: true });
+  fs.writeFileSync(RUN_FILE, JSON.stringify({ pid: process.pid, port: PORT, started: new Date().toISOString() }));
   console.log(`Veritas running at http://localhost:${PORT}`);
   console.log(process.env.NEWSAPI_KEY ? 'NewsAPI: enabled' : 'NewsAPI: disabled (set NEWSAPI_KEY to add it as a source)');
   edition('').catch(e => console.error('initial fetch failed:', e.message)); // warm the cache

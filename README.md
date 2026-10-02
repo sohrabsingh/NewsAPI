@@ -2,6 +2,9 @@
 
 Veritas pulls news from 40+ outlets: public broadcasters, newspapers, independent media, state media and fact-checkers, plus Google News, GDELT and NewsAPI if you add a key. It groups articles about the same event into one story and checks how many **independent owners** report it. Each story shows its claims, theories, the people involved and the background of every outlet carrying it.
 
+**Windows, one click:** double-click **`start.bat`**. It starts Veritas in the background with no window and opens it in your browser. Double-click **`stop.bat`** to shut it down completely; it stops only Veritas, never your other Node programs.
+
+**Any OS, from a terminal:**
 ```bash
 npm start            # or: node server.js   (Node 18+, no dependencies)
 # open http://localhost:3000
