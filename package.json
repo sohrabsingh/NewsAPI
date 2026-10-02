@@ -1,0 +1,9 @@
+{
+  "name": "veritas-news",
+  "version": "1.0.0",
+  "description": "Cross-verified news: aggregates 40+ outlets, clusters stories, scores corroboration, maps claims, profiles people and outlets.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}

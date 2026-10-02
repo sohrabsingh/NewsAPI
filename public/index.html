@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Veritas — cross-verified news</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a7f37'/><path d='M9 16.5l4.5 4.5L23 11' stroke='white' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">✓</span> Veritas <small>cross-verified news</small></div>
+    <form id="search" class="search" role="search">
+      <input id="q" type="search" placeholder="Search any topic across every outlet… (e.g. Ebola, RBI, election)" autocomplete="off">
+      <button type="submit">Verify</button>
+    </form>
+    <nav class="actions">
+      <button id="btn-prefs" class="ghost" aria-expanded="false" title="Your preferences">⚙ Preferences</button>
+      <button id="btn-outlets" class="ghost" title="Every outlet, its owners and credibility">🏛 Outlets</button>
+      <button id="btn-refresh" class="ghost" title="Fetch fresh coverage">↻</button>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside id="prefs" class="prefs" hidden>
+      <h3>Your feed</h3>
+      <label class="lbl">Topics <span class="hint">none = all</span></label>
+      <div id="pref-topics" class="chips"></div>
+      <label class="lbl">Regions <span class="hint">none = all</span></label>
+      <div id="pref-regions" class="chips"></div>
+      <label class="lbl" for="pref-follow">Follow keywords / people</label>
+      <input id="pref-follow" placeholder="e.g. Modi, AI, Gaza" title="Comma-separated. Matching stories rank higher.">
+      <label class="lbl" for="pref-block">Hide stories mentioning</label>
+      <input id="pref-block" placeholder="e.g. celebrity, IPL">
+      <label class="lbl" for="pref-min">Show</label>
+      <select id="pref-min">
+        <option value="any">All stories (incl. single-source)</option>
+        <option value="corroborated">Corroborated by 2+ independent owners</option>
+        <option value="verified">Verified only (3+ owners, high score)</option>
+      </select>
+      <label class="lbl" for="pref-sort">Sort by</label>
+      <select id="pref-sort">
+        <option value="relevance">Relevance to me</option>
+        <option value="verified">Most verified</option>
+        <option value="latest">Latest</option>
+      </select>
+      <label class="check"><input type="checkbox" id="pref-indie"> Boost independent media</label>
+      <label class="check"><input type="checkbox" id="pref-state"> Hide stories only state media carry</label>
+      <p class="hint">Muted outlets: manage in 🏛 Outlets. Preferences are stored in this browser only.</p>
+    </aside>
+
+    <main>
+      <div id="status" class="statusbar">Loading coverage from 40+ outlets…</div>
+      <div id="legend" class="legend">
+        <span><i class="dot verified"></i>Verified</span>
+        <span><i class="dot corroborated"></i>Corroborated</span>
+        <span><i class="dot single-source"></i>Single source</span>
+        <span><i class="dot contested"></i>Contested / fact-checked</span>
+      </div>
+      <div id="feed" class="feed"></div>
+    </main>
+  </div>
+
+  <!-- Story detail -->
+  <div id="drawer" class="drawer" hidden>
+    <div class="drawer-backdrop" data-close></div>
+    <article class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="d-title">
+      <button class="close" data-close aria-label="Close">✕</button>
+      <div id="d-head"></div>
+      <div class="toolbar">
+        <button id="btn-diverge" class="toggle" aria-pressed="false" title="Show where each outlet goes on and off the shared account">
+          <span class="switch"><span></span></span> Divergence view: <b>OFF</b>
+        </button>
+        <button id="btn-deep" class="ghost" title="Download every outlet's full article and re-run the cross-check">🔬 Deep verify (read full articles)</button>
+        <span id="deep-status" class="hint"></span>
+      </div>
+      <section id="d-diverge" class="diverge" hidden></section>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="coverage" aria-selected="true">Coverage</button>
+        <button role="tab" data-tab="claims">Claims</button>
+        <button role="tab" data-tab="theories">Theories &amp; angles</button>
+        <button role="tab" data-tab="people">People &amp; entities</button>
+        <button role="tab" data-tab="outlets">Outlet scrutiny</button>
+      </nav>
+      <section id="d-body" class="tab-body"></section>
+    </article>
+  </div>
+
+  <!-- Outlets directory / profile -->
+  <div id="modal" class="drawer" hidden>
+    <div class="drawer-backdrop" data-close></div>
+    <article class="drawer-panel wide" role="dialog" aria-modal="true">
+      <button class="close" data-close aria-label="Close">✕</button>
+      <div id="m-body"></div>
+    </article>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

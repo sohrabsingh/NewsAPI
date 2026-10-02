@@ -1,0 +1,11 @@
+# Python scripts only. The Veritas web app (server.js) needs Node 18+ and nothing else.
+# Install with: pip install -r requirements.txt
+
+# ss.py — Telegram news bot
+requests
+python-telegram-bot>=20
+
+# ml.py — Gmail-to-Word export (also needs credentials.json from Google Cloud, git-ignored)
+google-api-python-client
+google-auth-oauthlib
+python-docx
