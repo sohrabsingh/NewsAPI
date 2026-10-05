@@ -15,11 +15,34 @@
       <button type="submit">Verify</button>
     </form>
     <nav class="actions">
+      <button id="btn-time" class="ghost" aria-pressed="false" title="View the news as it was at a past moment">🕰 Time travel</button>
       <button id="btn-prefs" class="ghost" aria-expanded="false" title="Your preferences">⚙ Preferences</button>
       <button id="btn-outlets" class="ghost" title="Every outlet, its owners and credibility">🏛 Outlets</button>
       <button id="btn-refresh" class="ghost" title="Fetch fresh coverage">↻</button>
     </nav>
   </header>
+
+  <section id="time-panel" class="time-panel" hidden>
+    <div class="time-row">
+      <label for="tt-input"><b>Show the news as it was on</b></label>
+      <input id="tt-input" type="datetime-local" min="2000-01-01T00:00">
+      <button data-jump="go" class="primary">Travel</button>
+      <span class="hint">or jump:</span>
+      <button data-jump="week" class="ghost">1 week ago</button>
+      <button data-jump="month" class="ghost">1 month ago</button>
+      <button data-jump="year" class="ghost">1 year ago</button>
+      <button data-jump="live" class="ghost">Back to live</button>
+    </div>
+    <p class="hint" id="tt-archive"></p>
+    <p class="hint">Only articles published <b>before</b> the chosen moment are shown, and scores and claims are re-checked using only those, so you see what was known then. Deep verify reads each article as the Wayback Machine saved it near that date.</p>
+  </section>
+
+  <div id="time-banner" class="time-banner" hidden>
+    🕰 Viewing the news as of <b id="time-when"></b>. Nothing published after this moment is shown.
+    <button id="time-back" class="ghost">◀ 1 day earlier</button>
+    <button id="time-fwd" class="ghost">1 day later ▶</button>
+    <button id="time-exit">Return to live</button>
+  </div>
 
   <div class="layout">
     <aside id="prefs" class="prefs" hidden>

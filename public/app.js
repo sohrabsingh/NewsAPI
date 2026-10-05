@@ -1,7 +1,9 @@
 // Veritas front-end: preference-ranked feed, story inspector, divergence view, people & outlet profiles.
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `${Math.max(m, 1)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; };
+// "Now" is the time-travel moment when one is set, so "3h ago" means 3h before that moment.
+const clock = () => state.asOf || Date.now();
+const ago = (t, ref = clock()) => { const m = Math.round((ref - t) / 60000); return m < 60 ? `${Math.max(m, 1)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; };
 const api = async u => { const r = await fetch(u); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
 
 const TOPICS = ['world', 'politics', 'business', 'tech', 'science', 'health', 'climate', 'sports', 'conflict', 'factcheck'];
@@ -10,7 +12,17 @@ const STATUS_COLOR = { verified: 'var(--verified)', corroborated: 'var(--corrobo
 const CLAIM_COLOR = { corroborated: 'var(--verified)', 'single-source': 'var(--single)', unconfirmed: 'var(--single)', disputed: 'var(--contested)' };
 const CLAIM_LABEL = { corroborated: 'Corroborated by independent outlets', 'single-source': 'Single outlet only', unconfirmed: 'Unconfirmed / speculative wording', disputed: 'Disputed or fact-checked' };
 
-const state = { data: null, outlets: {}, story: null, tab: 'coverage', diverge: false, deep: {}, profiles: {} };
+const state = { data: null, outlets: {}, story: null, tab: 'coverage', diverge: false, deep: {}, profiles: {}, asOf: null };
+
+// URL hash keeps the time-travel moment and open story, so links reopen the same view.
+function setHash(storyId) {
+  const h = new URLSearchParams();
+  if (state.asOf) h.set('asof', new Date(state.asOf).toISOString());
+  if (storyId) h.set('story', storyId);
+  const s = h.toString();
+  history.replaceState(null, '', s ? '#' + s : location.pathname);
+}
+{ const t = Date.parse(new URLSearchParams(location.hash.slice(1)).get('asof') || ''); if (t < Date.now()) state.asOf = t; }
 
 // ---------- preferences ----------
 const DEFAULT_PREFS = { topics: [], regions: [], follow: '', block: '', min: 'any', sort: 'relevance', indie: true, hideState: false, muted: [] };
@@ -50,10 +62,16 @@ const relColor = v => (v >= 75 ? 'var(--verified)' : v >= 60 ? 'var(--corroborat
 const srcChip = id => { const o = outlet(id); const c = credibility(o); return `<span class="src" title="${esc(o.name)} — credibility ${o.unrated ? 'unrated' : c}/100, ${esc(o.leaning)}"><i class="rel" style="background:${o.unrated ? 'var(--muted)' : relColor(c)}"></i>${esc(o.name)}</span>`; };
 
 // ---------- feed ----------
+let loadSeq = 0;
 async function load(q = '', refresh = false) {
-  $('#status').textContent = q ? `Searching every outlet for “${q}” and cross-checking…` : 'Fetching and cross-checking coverage from 40+ outlets…';
+  const past = state.asOf ? ` as of ${fmtDate(state.asOf)}` : '';
+  $('#status').textContent = q ? `Searching every outlet for “${q}”${past} and cross-checking…`
+    : past ? `Fetching the news${past} fresh from the internet: each outlet's feed as archived that day, date-limited searches and Wikipedia's daily records… (first visit to a date can take ~30s)` : 'Fetching and cross-checking coverage from 40+ outlets…';
+  renderTimeBanner();
+  const req = ++loadSeq;
   try {
-    const d = await api(`/api/news?${new URLSearchParams({ q, ...(refresh ? { refresh: '1' } : {}) })}`);
+    const d = await api(`/api/news?${new URLSearchParams({ q, ...(state.asOf ? { asOf: state.asOf } : {}), ...(refresh ? { refresh: '1' } : {}) })}`);
+    if (req !== loadSeq) return; // a newer request (e.g. another date) superseded this one
     state.data = d; Object.assign(state.outlets, d.outlets);
     renderFeed();
     // Deep link: #story=<id>[&diverge=1][&tab=claims]
@@ -63,7 +81,7 @@ async function load(q = '', refresh = false) {
       if (openStory(h.get('story')) && h.get('tab')) { state.tab = h.get('tab'); renderTab(); }
     }
   } catch (e) {
-    $('#status').textContent = 'Could not load news: ' + e.message;
+    if (req === loadSeq) $('#status').textContent = 'Could not load news: ' + e.message;
   }
 }
 
@@ -73,7 +91,7 @@ function rank() {
   const follow = list(prefs.follow), block = list(prefs.block);
   const rankOrder = { any: 0, corroborated: 1, verified: 2 };
   const statusRank = s => ({ 'single-source': 0, contested: 1, corroborated: 1, verified: 2 }[s]);
-  const now = Date.now();
+  const now = clock();
   return state.data.stories.map(st => {
     const items = visibleItems(st);
     if (!items.length) return null;
@@ -102,9 +120,13 @@ function renderFeed() {
   const rows = rank();
   const multi = d.stories.filter(s => s.verification.independentVoices > 1).length;
   const errs = d.feeds.errors.length ? ` <details><summary class="hint">${d.feeds.errors.length} feed(s) failed</summary>${d.feeds.errors.map(e => `<div class="hint">${esc(e.feed)}: ${esc(e.error)}</div>`).join('')}</details>` : '';
+  const cov = d.coverage;
+  const sourcesLine = cov
+    ? `${cov.frontPages} from ${cov.frontPageOutlets} outlets' own feeds as saved that day · ${cov.dated} from date-limited searches · ${cov.wikipedia} from Wikipedia's daily events · ${cov.archived} from your local archive (${fmtDate(cov.from, true)} → ${fmtDate(cov.to)})${cov.partial ? ' · <b>more outlets still arriving from archive.org — press ↻ in a minute</b>' : ''}`
+    : `${d.feeds.ok}/${d.feeds.attempted} feeds reached · updated ${ago(d.generatedAt, Date.now())}`;
   $('#status').innerHTML = `${d.query ? `Results for “${esc(d.query)}” · <a href="#" id="clear-q">back to headlines</a> · ` : ''}` +
-    `${rows.length} shown of ${d.stories.length} stories · ${multi} cross-reported · ${d.feeds.ok}/${d.feeds.attempted} feeds reached · updated ${ago(d.generatedAt)}${errs} · <a href="#" id="open-health">feed health</a>`;
-  $('#open-health').onclick = e => { e.preventDefault(); openHealth(); };
+    `${rows.length} shown of ${d.stories.length} stories · ${multi} cross-reported · ${sourcesLine}${errs}${cov ? '' : ' · <a href="#" id="open-health">feed health</a>'}`;
+  const oh = $('#open-health'); if (oh) oh.onclick = e => { e.preventDefault(); openHealth(); };
   const clr = $('#clear-q'); if (clr) clr.onclick = e => { e.preventDefault(); $('#q').value = ''; load(); };
   $('#feed').innerHTML = rows.length ? rows.slice(0, 150).map(({ st, items }) => {
     const v = st.verification, srcs = [...new Set(items.map(i => i.sourceId))];
@@ -134,7 +156,7 @@ function analysis(st) { return (state.deep[st.id] && state.deep[st.id].analysis)
 
 function openStory(id) {
   const st = state.data.stories.find(s => s.id === id);
-  if (!st) { history.replaceState(null, '', location.pathname); return false; }
+  if (!st) { setHash(); return false; }
   state.story = st; state.tab = 'coverage';
   const v = st.verification;
   const leanList = v.leanings.length ? v.leanings.join(', ') : 'unknown';
@@ -152,13 +174,13 @@ function openStory(id) {
   $('#deep-status').textContent = state.deep[st.id] ? 'Deep verification loaded.' : '';
   setDiverge(state.diverge);
   $('#drawer').hidden = false; document.body.style.overflow = 'hidden';
-  history.replaceState(null, '', '#story=' + st.id);
+  setHash(st.id);
   renderTab();
   return true;
 }
 
-function closeAll() { history.replaceState(null, '', location.pathname); $('#drawer').hidden = true; $('#modal').hidden = true; document.body.style.overflow = ''; }
-document.addEventListener('click', e => { if (e.target.closest('[data-close]')) { const dlg = e.target.closest('.drawer'); dlg.hidden = true; if (dlg.id === 'drawer') history.replaceState(null, '', location.pathname); if ($('#drawer').hidden && $('#modal').hidden) document.body.style.overflow = ''; } });
+function closeAll() { setHash(); $('#drawer').hidden = true; $('#modal').hidden = true; document.body.style.overflow = ''; }
+document.addEventListener('click', e => { if (e.target.closest('[data-close]')) { const dlg = e.target.closest('.drawer'); dlg.hidden = true; if (dlg.id === 'drawer') setHash(); if ($('#drawer').hidden && $('#modal').hidden) document.body.style.overflow = ''; } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#modal').hidden) $('#modal').hidden = true; else closeAll(); } });
 
 document.querySelector('.tabs').addEventListener('click', e => {
@@ -273,7 +295,7 @@ function tabPeople(st, body) {
       (groups[p && p.found ? (p.kind === 'person' ? 'person' : p.kind === 'organization' ? 'organization' : 'other') : 'other']).push([e, p]);
     }
     const section = (title, arr) => arr.length ? `<h4>${title}</h4><div class="grid2">${arr.map(([e, p]) => profileCard(p, e.name)).join('')}</div>` : '';
-    body.innerHTML = `<p class="hint">Background from Wikipedia &amp; Wikidata, including any controversies, criticism or legal sections. Mentioned by: ${ents.map(e => `${esc(e.name)} (${e.sources.length} outlet${e.sources.length > 1 ? 's' : ''})`).join(', ')}.</p>` +
+    body.innerHTML = `<p class="hint">Background from Wikipedia &amp; Wikidata, including any controversies, criticism or legal sections.${state.asOf ? ' <b>Note: profiles show what Wikipedia says today, not as of ' + esc(fmtDate(state.asOf)) + ' — later events may appear.</b>' : ''} Mentioned by: ${ents.map(e => `${esc(e.name)} (${e.sources.length} outlet${e.sources.length > 1 ? 's' : ''})`).join(', ')}.</p>` +
       section('People', groups.person) + section('Organisations', groups.organization) + section('Places &amp; other', groups.other);
   };
   draw();
@@ -292,7 +314,7 @@ function outletCard(id, prof) {
       <dt>Country</dt><dd>${esc(o.country || '?')}</dd>
       <dt>Editorial leaning</dt><dd>${esc(o.leaning)}</dd>
       <dt>Baseline reliability</dt><dd>${o.reliability ?? 'not rated'}${o.reliability != null ? '/100 (curated estimate)' : ''}</dd>
-      <dt>Live corroboration</dt><dd>${live ? `${Math.round(live.corroborationRate * 100)}% of its ${live.articles} current stories are echoed by other owners · ${live.solo} exclusive/solo · ${live.contested} contested` : 'no data yet'}</dd>
+      <dt>${state.asOf ? 'Corroboration then' : 'Live corroboration'}</dt><dd>${live ? `${Math.round(live.corroborationRate * 100)}% of its ${live.articles} ${state.asOf ? 'stories in this edition' : 'current stories'} are echoed by other owners · ${live.solo} exclusive/solo · ${live.contested} contested` : 'no data yet'}</dd>
       ${o.independent ? '<dt>Independent</dt><dd>Yes — not owned by a conglomerate or state</dd>' : ''}
     </dl>
     ${(o.notes || []).map(n => `<div class="warn">${esc(n)}</div>`).join('')}
@@ -375,7 +397,9 @@ function renderDiverge(st) {
 $('#btn-deep').onclick = async () => {
   const st = state.story; if (!st) return;
   const status = $('#deep-status');
-  status.textContent = 'Reading full articles from each outlet and re-running the cross-check…';
+  status.textContent = state.story.asOf || state.asOf
+    ? 'Reading each article as the Wayback Machine saved it around that date (this can take ~30s)…'
+    : 'Reading full articles from each outlet and re-running the cross-check…';
   $('#btn-deep').disabled = true;
   try {
     state.deep[st.id] = await api(`/api/story/${st.id}/deep`);
@@ -450,10 +474,64 @@ async function openHealth() {
       : '<p class="hint">No changes recorded yet — events appear when a feed goes down, empties, shrinks or recovers.</p>'}`;
 }
 
+// ---------- time travel ----------
+const fmtDate = (t, short) => new Date(t).toLocaleString(undefined, short ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const toLocalInput = t => { const d = new Date(t - new Date(t).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+
+function travelTo(t) {
+  state.asOf = t && t < Date.now() - 60e3 ? Math.max(t, Date.parse('2000-01-01')) : null;
+  state.deep = {};
+  $('#time-panel').hidden = true;
+  closeAll(); setHash();
+  window.scrollTo(0, 0);
+  load($('#q').value.trim());
+}
+
+function renderTimeBanner() {
+  const on = !!state.asOf;
+  document.body.classList.toggle('past', on);
+  $('#btn-time').setAttribute('aria-pressed', on);
+  $('#time-banner').hidden = !on;
+  if (on) {
+    $('#time-when').textContent = fmtDate(state.asOf);
+    $('#tt-input').value = toLocalInput(state.asOf);
+  }
+}
+
+async function openTimePanel() {
+  const p = $('#time-panel');
+  p.hidden = !p.hidden;
+  if (p.hidden) return;
+  const input = $('#tt-input');
+  input.max = toLocalInput(Date.now());
+  if (!input.value) input.value = toLocalInput(state.asOf || Date.now() - 864e5);
+  try {
+    const a = await api('/api/archive');
+    $('#tt-archive').innerHTML = a.days
+      ? `Your local archive holds <b>${a.days} day${a.days > 1 ? 's' : ''}</b> of fetched articles (${esc(a.oldest)} → ${esc(a.newest)}, ${(a.bytes / 1048576).toFixed(1)} MB of max ${Math.round(a.maxBytes / 1048576)} MB). Dates before that are rebuilt from Wikipedia's daily event records plus date-limited Google News searches.`
+      : "Your local archive is empty so far — it fills automatically while Veritas runs. Older dates are rebuilt from Wikipedia's daily records and date-limited searches.";
+  } catch {}
+}
+
+$('#btn-time').onclick = openTimePanel;
+$('#time-panel').addEventListener('click', e => {
+  const b = e.target.closest('button[data-jump]'); if (!b) return;
+  const j = b.dataset.jump, base = state.asOf || Date.now();
+  const t = j === 'go' ? new Date($('#tt-input').value).getTime()
+    : j === 'live' ? null
+    : j === 'back1' ? base - 864e5 : j === 'fwd1' ? base + 864e5
+    : Date.now() - { week: 7, month: 30, year: 365 }[j] * 864e5;
+  if (j === 'go' && !Number.isFinite(t)) return;
+  travelTo(t);
+});
+$('#time-exit').onclick = () => travelTo(null);
+$('#time-back').onclick = () => travelTo(state.asOf - 864e5);
+$('#time-fwd').onclick = () => travelTo(state.asOf + 864e5);
+
 // ---------- boot ----------
 $('#btn-outlets').onclick = openOutletsDirectory;
 $('#btn-refresh').onclick = () => load($('#q').value.trim(), true);
 $('#search').onsubmit = e => { e.preventDefault(); load($('#q').value.trim()); };
 initPrefs();
 load();
-setInterval(() => { if ($('#drawer').hidden && $('#modal').hidden) load($('#q').value.trim()); }, 10 * 60e3);
+setInterval(() => { if (!state.asOf && $('#drawer').hidden && $('#modal').hidden) load($('#q').value.trim()); }, 10 * 60e3); // the past doesn't need refreshing

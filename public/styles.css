@@ -149,3 +149,19 @@ details.scrutiny p { font-size: 13px; white-space: pre-line; margin: 4px 0 8px; 
 .spark i.ok { background: var(--verified); }
 .spark i.em { background: var(--single); height: 9px; }
 .spark i.bad { background: var(--contested); height: 6px; }
+
+/* time travel */
+:root { --past: #8a5a00; --past-bg: #fbf3e2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --past: #e8b65a; --past-bg: #2a2214; } }
+.time-panel { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 20px; }
+.time-panel p { margin: 6px 0 0; max-width: 1100px; }
+.time-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.time-row input { width: auto; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+#btn-time[aria-pressed="true"] { border-color: var(--past); color: var(--past); }
+.time-banner { position: sticky; top: 57px; z-index: 4; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  padding: 8px 20px; background: var(--past-bg); color: var(--past); border-bottom: 2px solid var(--past); font-size: 14px; }
+.time-banner button { padding: 3px 10px; font-size: 13px; }
+body.past .card { border-top: 1px dashed var(--past); }
+body.past .logo { background: var(--past); }
+@media (max-width: 860px) { .time-panel, .time-banner { padding-left: 16px; padding-right: 16px; } .time-banner { top: 0; position: static; } }
